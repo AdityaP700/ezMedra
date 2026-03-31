@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+.expo/
+*.tsbuildinfo
+# Environment files — NEVER commit these
+.env
+.env.local
+.env.development
+.env.production
+
+# Build outputs
+.next/
+dist/
+build/
+node_modules/
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Expo
+.expo/
+web-build/
