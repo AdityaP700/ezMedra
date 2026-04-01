@@ -198,6 +198,7 @@ Standalone utility scripts for database seeding and smoke testing. Run with `nod
 | `seed.js` | Creates a full demo dataset: 2 departments, 4 sections, subjects, 1 admin, 2 faculty per department, 10 students per section, class slots, teaching roles. Idempotent (safe to re-run). |
 | `seedLeaveQueuesDemo.js` | Inserts sample leave applications in various workflow states for UI/workflow testing. |
 | `seedWorkflowScenarios.js` | Creates complex workflow scenarios (escalations, overrides, conflicts) for integration testing. |
+| `seedMasterFaculty.js` | Creates `master.faculty@slms.com` (password: `faculty123`) — a catch-all reviewer assigned to every IT subject and section. Re-assigns all existing `faculty_pending` / `pending` IT leaves to this account so the full review queue is visible from one login. Run with `npm run seed:master-faculty`. |
 | `makeAllStudentsAttendance100.js` | Utility to reset all student attendance percentages to 100 %. Useful before demonstrations. |
 | `e2e-smoke.js` | End-to-end smoke test that exercises the login, leave application, and approval flows. |
 | `verifySemesterTimetable.js` | Validates timetable generation correctness: checks for schedule conflicts, session counts, and slot coverage. |
