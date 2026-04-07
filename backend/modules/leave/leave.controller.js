@@ -18,6 +18,18 @@ const getLeaveBalance = asyncHandler(async (req, res) => {
 
 const getInsights = asyncHandler(async (req, res) => {
   const insights = await leaveService.getStudentInsights(req.user.userId);
+  try {
+    const fs = require('fs');
+    const line = JSON.stringify({
+      at: new Date().toISOString(),
+      userId: req.user.userId,
+      role: req.user.role,
+      insights,
+    });
+    fs.appendFileSync('insights-debug.log', `${line}\n`);
+  } catch (_err) {
+    // Do not block API response if local debug logging fails.
+  }
   res.json({ success: true, data: insights });
 });
 

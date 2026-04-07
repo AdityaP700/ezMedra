@@ -38,6 +38,7 @@ app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'SLMS API is running', timestamp: new Date().toISOString() });
 });
 
+
 // ── Route Mounting ────────────────────────────────
 const authRoutes = require('./modules/auth/auth.routes');
 const leaveRoutes = require('./modules/leave/leave.routes');

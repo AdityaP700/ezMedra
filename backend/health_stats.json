@@ -1,0 +1,42 @@
+{
+  "stats": {
+    "s2": {
+      "conducted_weight": 421,
+      "attended_weight": 257,
+      "marked_weight": 296
+    },
+    "s3": {
+      "conducted_weight": 421,
+      "attended_weight": 196,
+      "marked_weight": 296
+    }
+  },
+  "insights": {
+    "i2": {
+      "attendanceScore": 61,
+      "attendancePercentage": 61,
+      "minAttendanceRequired": 75,
+      "riskIndicator": "yellow",
+      "streak": 0,
+      "badges": [
+        "risky"
+      ],
+      "semester": 5,
+      "pendingCount": 1,
+      "approvedCount": 0
+    },
+    "i3": {
+      "attendanceScore": 47,
+      "attendancePercentage": 46.6,
+      "minAttendanceRequired": 75,
+      "riskIndicator": "red",
+      "streak": 0,
+      "badges": [
+        "risky"
+      ],
+      "semester": 5,
+      "pendingCount": 0,
+      "approvedCount": 0
+    }
+  }
+}

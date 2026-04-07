@@ -1,0 +1,41 @@
+{
+  "users": [
+    {
+      "id": 58,
+      "email": "demo.borderline@slms.com",
+      "attendance_percentage": 86
+    },
+    {
+      "id": 3,
+      "email": "critical.student@slms.com",
+      "attendance_percentage": 65
+    },
+    {
+      "id": 2,
+      "email": "borderline.student@slms.com",
+      "attendance_percentage": 86
+    }
+  ],
+  "attendances": [
+    {
+      "student_id": 2,
+      "status": "ABSENT",
+      "count": "34"
+    },
+    {
+      "student_id": 3,
+      "status": "ABSENT",
+      "count": "84"
+    },
+    {
+      "student_id": 2,
+      "status": "PRESENT",
+      "count": "206"
+    },
+    {
+      "student_id": 3,
+      "status": "PRESENT",
+      "count": "156"
+    }
+  ]
+}

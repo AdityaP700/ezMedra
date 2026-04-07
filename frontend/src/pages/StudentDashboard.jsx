@@ -245,7 +245,7 @@ export default function StudentDashboard() {
       key: 'actions',
       label: 'Actions',
       render: (row) =>
-        row.status === 'pending' ? (
+        ['pending', 'faculty_pending', 'submitted'].includes(String(row.status || '').toLowerCase()) ? (
           <button
             onClick={() => setCancelTarget(row)}
             className="text-sm text-red-600 hover:text-red-700 font-medium transition-colors"
@@ -259,14 +259,51 @@ export default function StudentDashboard() {
     },
   ];
 
-  const pendingCount = leaves.filter((l) => l.status === 'pending').length;
-  const approvedCount = leaves.filter((l) => l.status === 'approved').length;
-  const attendanceScore = insights?.attendanceScore ?? 0;
+  const pendingStatuses = ['pending', 'faculty_pending', 'submitted', 'forwarded', 'hod_review', 'escalated', 'conflict', 'provisional'];
+  const approvedStatuses = ['approved', 'hod_approved'];
+  const pendingCount = leaves.filter((l) => pendingStatuses.includes(String(l.status || '').toLowerCase())).length;
+  const approvedLeaves = leaves.filter((l) => approvedStatuses.includes(String(l.status || '').toLowerCase()));
+  const approvedCount = approvedLeaves.length;
+  const latestApprovedLeave = approvedLeaves[0] || null;
+
+  const apiAttendanceScore = Number(insights?.attendanceScore ?? 0);
+  const approvedProjectedAttendance = latestApprovedLeave ? Number(latestApprovedLeave.projected_attendance) : NaN;
+  const approvedCurrentAttendance = latestApprovedLeave ? Number(latestApprovedLeave.current_attendance) : NaN;
+  const derivedAttendanceScore = Number.isFinite(approvedProjectedAttendance)
+    ? approvedProjectedAttendance
+    : (Number.isFinite(approvedCurrentAttendance) ? approvedCurrentAttendance : NaN);
+  const attendanceScore = Number.isFinite(derivedAttendanceScore)
+    ? Math.round(Math.max(0, Math.min(100, derivedAttendanceScore)))
+    : Math.round(Math.max(0, Math.min(100, apiAttendanceScore)));
+
+  const profileBalance = Number(user?.leave_balance ?? 15);
+  const approvedDaysUsed = approvedLeaves.reduce((sum, leave) => {
+    const approvedDays = Number(leave.approved_days);
+    const totalDays = Number(leave.total_days);
+    const days = Number.isFinite(approvedDays) && approvedDays > 0 ? approvedDays : (Number.isFinite(totalDays) ? totalDays : 0);
+    return sum + days;
+  }, 0);
+  const derivedBalance = Math.max(0, Number((profileBalance - approvedDaysUsed).toFixed(2)));
+  const apiBalance = Number(balance);
+  const rawEffectiveBalance = Number.isFinite(apiBalance)
+    ? (approvedLeaves.length > 0 ? Math.min(apiBalance, derivedBalance) : apiBalance)
+    : derivedBalance;
+
+  const attendanceTierCap = attendanceScore < 60 ? 1 : attendanceScore < 75 ? 3 : Number.POSITIVE_INFINITY;
+  const cappedEffectiveBalance = Number.isFinite(attendanceTierCap)
+    ? Math.min(rawEffectiveBalance, attendanceTierCap)
+    : rawEffectiveBalance;
+
   const riskIndicator = insights?.riskIndicator || 'green';
   const riskTone = riskIndicator === 'red' ? 'text-red-600 bg-red-50 border-red-200' : riskIndicator === 'yellow' ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200';
   const minimumClassesRequired = Math.ceil((MIN_ATTENDANCE_PERCENT / 100) * SEMESTER_TOTAL_CLASSES);
   const estimatedAttendedClasses = Math.round((Math.max(0, Math.min(100, attendanceScore)) / 100) * SEMESTER_TOTAL_CLASSES);
   const classesNeededForThreshold = Math.max(0, minimumClassesRequired - estimatedAttendedClasses);
+  const leaveCreditCap = Number(insights?.leaveCreditCapDays);
+  const fallbackCapLabel = Number.isFinite(attendanceTierCap)
+    ? attendanceTierCap.toFixed(2)
+    : Number(user?.leave_balance ?? 15).toFixed(2);
+  const leaveCapLabel = Number.isFinite(leaveCreditCap) ? leaveCreditCap.toFixed(2) : fallbackCapLabel;
 
   const toClassEquivalent = (percent) => Math.round((Math.max(0, Math.min(100, Number(percent || 0))) / 100) * SEMESTER_TOTAL_CLASSES);
 
@@ -284,7 +321,7 @@ export default function StudentDashboard() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          <StatCard title={`Leave Days Left (out of ${user?.leave_balance ?? 15})`} value={balance ?? '—'} color="primary" loading={loading} />
+          <StatCard title={`Leave Days Left (out of ${leaveCapLabel})`} value={Number.isFinite(cappedEffectiveBalance) ? cappedEffectiveBalance.toFixed(2) : '—'} color="primary" loading={loading} />
           <StatCard title="Pending" value={pendingCount} color="warning" loading={loading} />
           <StatCard title="Approved" value={approvedCount} color="success" loading={loading} />
           <StatCard title="Attendance Streak" value={insights?.streak ?? 0} color="info" loading={loading} />

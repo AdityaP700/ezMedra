@@ -24,6 +24,41 @@ const ALLOWED_MIME_TYPES = new Set([
 ]);
 
 class LeaveService {
+  _resolveLeaveCreditPolicy(attendancePercentage) {
+    const attendance = Number(attendancePercentage || 0);
+    if (attendance < HARD_BLOCK_ATTENDANCE) {
+      return {
+        tier: 'CRITICAL',
+        maxUsableDays: 1,
+        message: 'Attendance below 60%: only 1 leave credit is usable.',
+      };
+    }
+    if (attendance < MIN_ATTENDANCE) {
+      return {
+        tier: 'LOW',
+        maxUsableDays: 3,
+        message: 'Attendance below 75%: only 3 leave credits are usable.',
+      };
+    }
+    return {
+      tier: 'NORMAL',
+      maxUsableDays: Number.POSITIVE_INFINITY,
+      message: 'Attendance is healthy: full leave balance can be used.',
+    };
+  }
+
+  _effectiveLeaveBalance(rawBalance, attendancePercentage) {
+    const safeBalance = Number(rawBalance || 0);
+    const policy = this._resolveLeaveCreditPolicy(attendancePercentage);
+    const effective = Number.isFinite(policy.maxUsableDays)
+      ? Math.min(safeBalance, policy.maxUsableDays)
+      : safeBalance;
+    return {
+      effectiveBalance: Number(Math.max(0, effective).toFixed(2)),
+      policy,
+    };
+  }
+
   async getLeaveTypes() {
     return leaveRepository.getLeaveTypes();
   }
@@ -291,9 +326,9 @@ class LeaveService {
     const marked = Number(attendanceStats?.marked_weight || 0);
     const safeFallback = Math.max(0, Math.min(100, Number(fallbackPercentage || 100)));
 
-    // If marks are missing, derive a realistic baseline so projection never collapses to 0.
-    if (marked === 0) {
-      const conducted = DEMO_BASELINE_CLASSES;
+    // If marks are missing or no classes conducted, use the baseline directly
+    if (marked === 0 || conductedRaw === 0) {
+      const conducted = conductedRaw || DEMO_BASELINE_CLASSES;
       const attended = Number(((safeFallback / 100) * conducted).toFixed(2));
       return {
         conducted,
@@ -302,10 +337,6 @@ class LeaveService {
         percentage: +safeFallback.toFixed(1),
         usedFallback: true,
       };
-    }
-
-    if (conductedRaw === 0) {
-      return { conducted: 0, attended: 0, marked, percentage: 100, usedFallback: false };
     }
 
     return {
@@ -387,7 +418,8 @@ class LeaveService {
     const sessionImpact = await this._calculateSessionDeduction(studentId, normalizedStartDate, normalizedEndDate, normalizedStartTime, normalizedEndTime);
     const attendanceStats = await leaveRepository.getAttendanceStats(studentId);
 
-    const leaveDeductionDays = Number((sessionImpact.weightedSessions || 0).toFixed(2));
+    const leaveDeductionDays = dayBreakdown.workingDays;
+    const sessionDeductionUnits = Number((sessionImpact.weightedSessions || 0).toFixed(2));
 
     const baseline = this._resolveCurrentAttendance({
       attendanceStats,
@@ -396,7 +428,7 @@ class LeaveService {
     const conducted = baseline.conducted;
     const attended = baseline.attended;
     const currentAttendance = baseline.percentage;
-    const projectedTotalUnits = Number((conducted + leaveDeductionDays).toFixed(2));
+    const projectedTotalUnits = Number((conducted + sessionDeductionUnits).toFixed(2));
     const projectedAttendance = projectedTotalUnits === 0
       ? 100
       : +((attended / projectedTotalUnits) * 100).toFixed(1);
@@ -416,7 +448,7 @@ class LeaveService {
       ? `Recommended: projected attendance stays at or above ${MIN_ATTENDANCE}%.`
       : `Risky: projected attendance falls below ${MIN_ATTENDANCE}%. Submit with strong justification.`;
 
-    if (leaveDeductionDays === 0) {
+    if (sessionDeductionUnits === 0) {
       warnings.push('No class overlap found in selected date/time range.');
     }
     if (baseline.usedFallback) {
@@ -462,11 +494,23 @@ class LeaveService {
   }
 
   async getLeaveBalance(studentId) {
-    const balance = await leaveRepository.getStudentBalance(studentId);
-    if (balance === null) {
+    const student = await leaveRepository.getStudentPolicyContext(studentId);
+    if (!student) {
       throw new AppError('Student not found.', 404);
     }
-    return balance;
+
+    const rawBalance = await leaveRepository.getStudentBalance(studentId);
+    if (rawBalance === null) {
+      throw new AppError('Student not found.', 404);
+    }
+
+    const attendanceStats = await leaveRepository.getAttendanceStats(studentId);
+    const baseline = this._resolveCurrentAttendance({
+      attendanceStats,
+      fallbackPercentage: student.attendance_percentage,
+    });
+    const { effectiveBalance } = this._effectiveLeaveBalance(rawBalance, baseline.percentage);
+    return effectiveBalance;
   }
 
   async getStudentInsights(studentId) {
@@ -491,30 +535,61 @@ class LeaveService {
       streak += 1;
     }
 
+    const activeLeaveStatuses = new Set([
+      'pending',
+      'faculty_pending',
+      'submitted',
+      'forwarded',
+      'hod_review',
+      'escalated',
+      'conflict',
+      'provisional',
+    ]);
+    const approvedLeaveStatuses = new Set(['approved', 'hod_approved']);
+    const latestMeasuredLeave = leaves.find((leave) => {
+      const value = Number(leave.current_attendance);
+      return Number.isFinite(value);
+    });
+    const latestMeasuredAttendance = latestMeasuredLeave
+      ? Number(latestMeasuredLeave.current_attendance)
+      : null;
+    // If live attendance fell back to profile defaults, prefer the latest measured leave snapshot.
+    const effectiveAttendancePercentage =
+      baseline.usedFallback && latestMeasuredAttendance != null
+        ? latestMeasuredAttendance
+        : liveAttendancePercentage;
+
     const badges = [];
     if (streak >= 3) {
       badges.push('consistent');
     }
-    if ((insights.metrics?.active_high_risk_count || 0) > 0 || liveAttendancePercentage < MIN_ATTENDANCE) {
+    if ((insights.metrics?.active_high_risk_count || 0) > 0 || effectiveAttendancePercentage < MIN_ATTENDANCE) {
       badges.push('risky');
     }
     if ((insights.metrics?.documented_count || 0) > 0 || (insights.metrics?.document_required_count || 0) > 0) {
       badges.push('medical');
     }
 
-    const attendanceScore = Math.round(liveAttendancePercentage);
-    const riskIndicator = this._riskIndicator(liveAttendancePercentage);
+    const attendanceScore = Math.round(effectiveAttendancePercentage);
+    const riskIndicator = this._riskIndicator(effectiveAttendancePercentage);
+    const pendingCount = leaves.filter((leave) => activeLeaveStatuses.has(String(leave.status || '').toLowerCase())).length;
+    const approvedCount = leaves.filter((leave) => approvedLeaveStatuses.has(String(leave.status || '').toLowerCase())).length;
+    const { effectiveBalance, policy } = this._effectiveLeaveBalance(insights.profile.leave_balance, effectiveAttendancePercentage);
 
     return {
       attendanceScore,
-      attendancePercentage: liveAttendancePercentage,
+      attendancePercentage: Number(effectiveAttendancePercentage.toFixed(1)),
       minAttendanceRequired: MIN_ATTENDANCE,
       riskIndicator,
       streak,
       badges,
       semester: insights.profile.semester,
-      pendingCount: Number(insights.metrics?.pending_count || 0),
-      approvedCount: Number(insights.metrics?.approved_count || 0),
+      pendingCount,
+      approvedCount,
+      effectiveLeaveBalance: effectiveBalance,
+      leaveCreditTier: policy.tier,
+      leaveCreditCapDays: Number.isFinite(policy.maxUsableDays) ? policy.maxUsableDays : null,
+      leaveCreditMessage: policy.message,
     };
   }
 
@@ -543,8 +618,9 @@ class LeaveService {
 
     const dayBreakdown = await this._calculateRangeBreakdown(normalizedStartDate, normalizedEndDate);
     const sessionImpact = await this._calculateSessionDeduction(studentId, normalizedStartDate, normalizedEndDate, normalizedStartTime, normalizedEndTime);
-    const totalDays = Number((sessionImpact.weightedSessions || 0).toFixed(2));
-    if (totalDays === 0) {
+    const totalDays = dayBreakdown.workingDays;
+    const sessionDeductionUnits = Number((sessionImpact.weightedSessions || 0).toFixed(2));
+    if (sessionDeductionUnits === 0) {
       const availableDatesHint = (sessionImpact.availableSessionDates || []).slice(0, 3).join(', ');
       const hintSuffix = availableDatesHint ? ` Session dates currently found in this range: ${availableDatesHint}.` : '';
       throw new AppError(`No leave deduction required for selected dates. Please select working days with overlapping class sessions.${hintSuffix}`, 400);
@@ -560,11 +636,17 @@ class LeaveService {
       throw new AppError('Rate limit exceeded: maximum 3 leave applications are allowed per 7 days.', 429);
     }
 
-    // Check leave balance
-    const balance = await leaveRepository.getStudentBalance(studentId);
-    if (balance < totalDays && !submitAnyway) {
+    // Check leave balance with attendance-based credit cap
+    const rawBalance = await leaveRepository.getStudentBalance(studentId);
+    const attendanceStats = await leaveRepository.getAttendanceStats(studentId);
+    const baseline = this._resolveCurrentAttendance({
+      attendanceStats,
+      fallbackPercentage: student.attendance_percentage,
+    });
+    const { effectiveBalance, policy } = this._effectiveLeaveBalance(rawBalance, baseline.percentage);
+    if (effectiveBalance < totalDays && !submitAnyway) {
       throw new AppError(
-        `Insufficient leave balance. Available: ${balance} days, Requested: ${totalDays} days.`,
+        `Insufficient leave credit. Usable: ${effectiveBalance} day(s), Requested: ${totalDays} day(s). ${policy.message}`,
         400
       );
     }

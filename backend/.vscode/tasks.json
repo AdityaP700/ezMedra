@@ -1,0 +1,15 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Check DB",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tmp_check_attend.js"
+			],
+			"isBackground": false,
+			"group": "test"
+		}
+	]
+}

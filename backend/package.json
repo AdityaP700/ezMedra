@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js",
+    "dev": "node --watch --watch-path=. server.js",
     "seed:queue-demo": "node scripts/seedLeaveQueuesDemo.js",
     "seed:workflow-scenarios": "node scripts/seedWorkflowScenarios.js",
     "seed:master-faculty": "node scripts/seedMasterFaculty.js",
