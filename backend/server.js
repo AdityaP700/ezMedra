@@ -77,7 +77,7 @@ async function boot() {
     }
   }
 
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 SLMS Server running on port ${PORT}`);
     console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
     if (process.env.ENABLE_BACKGROUND_WORKER !== 'false') {
