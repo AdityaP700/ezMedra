@@ -237,9 +237,10 @@ class LeaveRepository {
          FROM users
          WHERE id = $1
        )
-       SELECT sa.faculty_id as id
+       SELECT tr.user_id as id
        FROM subject_assignments sa
        JOIN student_ctx st ON st.section_id IS NOT NULL AND sa.section_id = st.section_id
+       JOIN teaching_roles tr ON tr.subject_id = sa.subject_id AND tr.role = 'PRIMARY'
        ORDER BY sa.created_at ASC
        LIMIT 1`,
       [studentId]
