@@ -284,7 +284,7 @@ export default function StudentDashboard() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          <StatCard title="Leave Days Left (out of 15)" value={balance ?? '—'} color="primary" loading={loading} />
+          <StatCard title={`Leave Days Left (out of ${user?.leave_balance ?? 15})`} value={balance ?? '—'} color="primary" loading={loading} />
           <StatCard title="Pending" value={pendingCount} color="warning" loading={loading} />
           <StatCard title="Approved" value={approvedCount} color="success" loading={loading} />
           <StatCard title="Attendance Streak" value={insights?.streak ?? 0} color="info" loading={loading} />
@@ -337,7 +337,7 @@ export default function StudentDashboard() {
           </div>
         </div>
 
-        {attendancePrediction && (
+        {/* {attendancePrediction && (
           <div className="card p-5 bg-gradient-to-br from-white to-sky-50/50 border-sky-100">
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-medium text-slate-500">Attendance Prediction</p>
@@ -367,7 +367,7 @@ export default function StudentDashboard() {
               <p className="text-sm text-red-600 mt-1">{attendancePrediction.warning}</p>
             ) : null}
           </div>
-        )}
+        )} */}
 
         {/* Quick Action */}
         <div className="flex justify-between items-center">
@@ -481,7 +481,7 @@ export default function StudentDashboard() {
                   <p>Selected range: <span className="font-medium">{prediction.selectedRangeDays}</span> day(s)</p>
                   <p>Sessions affected: <span className="font-medium">{prediction.availableSessionsInRange ?? 0}</span></p>
                   <p>Weighted impact: <span className="font-semibold">{prediction.chargeableDays}</span> class unit(s)</p>
-                  <p>You will miss <span className="font-medium">{prediction.availableSessionsInRange ?? 0}</span> scheduled classes across <span className="font-medium">{prediction.workingDays}</span> working day(s).</p>
+                  <p>You may miss up to <span className="font-medium">{prediction.affectedSessionsCount ?? prediction.availableSessionsInRange ?? 0}</span> sessions across <span className="font-medium">{prediction.workingDays}</span> working day(s).</p>
                   <p>- Holidays: <span className="font-medium">{prediction.holidayDays}</span> day(s)</p>
                   <p>- Weekends: <span className="font-medium">{prediction.weekendDays}</span> day(s)</p>
                   <p>- Working days: <span className="font-medium">{prediction.workingDays}</span> day(s)</p>

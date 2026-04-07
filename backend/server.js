@@ -1,6 +1,18 @@
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config();
+const path = require('path');
+const dotenv = require('dotenv');
+
+// Load environment variables based on NODE_ENV
+const envFile = process.env.NODE_ENV === 'production' ? '.env.prod' : '.env.local';
+const envPath = path.resolve(__dirname, envFile);
+
+if (require('fs').existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+  console.log(`🌍 Loaded environment from ${envFile}`);
+} else {
+  dotenv.config(); // fallback to default .env
+}
 
 const { errorHandler } = require('./middleware/errorHandler');
 const { rateLimit } = require('./middleware/rateLimit.middleware');

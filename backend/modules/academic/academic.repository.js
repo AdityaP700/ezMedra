@@ -219,6 +219,7 @@ class AcademicRepository {
     const result = await pool.query(
       `SELECT
          u.role,
+         u.is_master,
          cs.faculty_id,
          EXISTS (
            SELECT 1
@@ -237,10 +238,18 @@ class AcademicRepository {
     if (!row) {
       return false;
     }
+    if (row.is_master) {
+      return true;
+    }
     if (Number(row.faculty_id) === Number(userId)) {
       return true;
     }
     return !!row.teaching_permission;
+  }
+
+  async isMasterFaculty(userId) {
+    const res = await pool.query('SELECT is_master FROM users WHERE id = $1', [userId]);
+    return res.rows[0]?.is_master === true;
   }
 
   async upsertClassSession({

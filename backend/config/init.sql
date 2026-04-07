@@ -55,6 +55,7 @@ CREATE TABLE users (
   attendance_percentage FLOAT NOT NULL DEFAULT 100 CHECK (attendance_percentage >= 0 AND attendance_percentage <= 100),
   semester INTEGER NOT NULL DEFAULT 1 CHECK (semester >= 1 AND semester <= 10),
   is_active BOOLEAN DEFAULT true,
+  is_master BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -479,7 +480,8 @@ INSERT INTO leave_types (name, description, max_days) VALUES
   ('Sick Leave', 'Medical or health-related leave', 10),
   ('Casual Leave', 'Personal or casual leave', 7),
   ('Academic Leave', 'Conference, workshop, or academic event', 5),
-  ('Emergency Leave', 'Urgent or emergency leave', 3);
+  ('Emergency Leave', 'Urgent or emergency leave', 3),
+  ('Other', 'Custom unspecified leave reason', 30);
 
 -- Subjects
 INSERT INTO subjects (code, name, department_id, semester) VALUES

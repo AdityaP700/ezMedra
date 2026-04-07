@@ -3,7 +3,7 @@ node_modules/
 .expo/
 *.tsbuildinfo
 # Environment files — NEVER commit these
-.env
+.env*
 .env.local
 .env.development
 .env.production

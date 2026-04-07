@@ -114,9 +114,10 @@ class AcademicService {
       throw new AppError('Class slot not found.', 404);
     }
 
+    const isMaster = await academicRepository.isMasterFaculty(facultyId);
     const sessionDate = leaveService._toDateOnly(payload.date);
     const sessionDayOfWeek = sessionDate.getDay();
-    if (Number(classSlot.day_of_week) !== Number(sessionDayOfWeek)) {
+    if (!isMaster && Number(classSlot.day_of_week) !== Number(sessionDayOfWeek)) {
       throw new AppError(
         'Regular class date must match the timetable day for the selected slot. Use EXTRA type for makeup/off-schedule classes.',
         400

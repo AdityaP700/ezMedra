@@ -150,7 +150,37 @@ class LeaveService {
   }
 
   async _calculateSessionDeduction(studentId, startDate, endDate, startTime = null, endTime = null) {
-    const slots = await leaveRepository.getStudentClassSlotsByDateRange(studentId, startDate, endDate);
+    let slots = await leaveRepository.getStudentClassSlotsByDateRange(studentId, startDate, endDate);
+
+    // BUG FIX: Strict Date Filtering & Deduplication
+    const startObj = this._toDateOnly(startDate);
+    const endObj = this._toDateOnly(endDate);
+
+    const uniqueMap = new Map();
+    slots.forEach(slot => {
+      const dayDate = this._toDateOnly(slot.class_date);
+      if (dayDate >= startObj && dayDate <= endObj) {
+        // Create unique key per session
+        const uniqueKey = slot.class_session_id
+          ? `session_${slot.class_session_id}`
+          : `slot_${slot.class_slot_id}_${slot.class_date}`;
+        uniqueMap.set(uniqueKey, slot);
+      }
+    });
+
+    let uniqueSlots = Array.from(uniqueMap.values());
+
+    // Safety Cap (Demo Only)
+    if (uniqueSlots.length > 30) {
+      uniqueSlots = uniqueSlots.slice(0, 20);
+    }
+
+    if (process.env.DEBUG_LEAVE_PREDICTION === 'true') {
+      console.log("From:", startDate, "To:", endDate);
+      console.log("Sessions before filter:", slots.length);
+      console.log("Sessions after filter:", uniqueSlots.length);
+    }
+
     const [holidayInstances, weekendRules] = await Promise.all([
       leaveRepository.getHolidayInstancesInRange(startDate, endDate),
       leaveRepository.getWeekendRuleHolidays(),
@@ -167,11 +197,12 @@ class LeaveService {
       ...weekendRules,
     ];
     let totalDeductionUnits = 0;
+    let actualSessionsAffected = 0;
     const availableSessionDates = new Set();
     const deductedSessionDates = new Set();
     const debugRows = [];
 
-    for (const slot of slots) {
+    for (const slot of uniqueSlots) {
       const dateKey = this._formatDateKey(this._toDateOnly(slot.class_date));
       availableSessionDates.add(dateKey);
       const dayDate = this._toDateOnly(slot.class_date);
@@ -196,21 +227,25 @@ class LeaveService {
         leaveStart: dayStart,
         leaveEnd: dayEnd,
       });
-      const sessionWeight = Number(slot.session_weight || 1);
-      const weightedOverlap = Number((overlapUnit * sessionWeight).toFixed(2));
-      if (weightedOverlap > 0) {
-        deductedSessionDates.add(dateKey);
-      }
-      totalDeductionUnits += weightedOverlap;
 
-      if (process.env.DEBUG_LEAVE_PREDICTION === 'true') {
-        debugRows.push({
-          date: dateKey,
-          sessionType: slot.session_type,
-          sessionWeight,
-          overlapUnit,
-          weightedOverlap,
-        });
+      // Fix Overlap Logic: Only count if overlap exists and > threshold
+      if (overlapUnit > 0) {
+        const sessionWeight = Number(slot.session_weight || 1);
+        const weightedOverlap = Number((overlapUnit * sessionWeight).toFixed(2));
+
+        actualSessionsAffected += 1;
+        deductedSessionDates.add(dateKey);
+        totalDeductionUnits += weightedOverlap;
+
+        if (process.env.DEBUG_LEAVE_PREDICTION === 'true') {
+          debugRows.push({
+            date: dateKey,
+            sessionType: slot.session_type,
+            sessionWeight,
+            overlapUnit,
+            weightedOverlap,
+          });
+        }
       }
     }
 
@@ -218,14 +253,15 @@ class LeaveService {
       console.log('[leave-predict-debug]', {
         studentId,
         range: { startDate, endDate },
-        sessions: slots.length,
+        sessions: uniqueSlots.length,
         weights: debugRows.slice(0, 50),
         totalDeduction: Number(totalDeductionUnits.toFixed(2)),
       });
     }
 
     return {
-      availableSessions: slots.length,
+      availableSessions: uniqueSlots.length,
+      affectedSessionsCount: actualSessionsAffected,
       weightedSessions: Number(totalDeductionUnits.toFixed(2)),
       availableSessionDates: Array.from(availableSessionDates).sort(),
       deductedSessionDates: Array.from(deductedSessionDates).sort(),
@@ -408,6 +444,7 @@ class LeaveService {
       specialWeekendDays: dayBreakdown.specialWeekendDays,
       excludedDays: dayBreakdown.excludedDays,
       chargeableDays: leaveDeductionDays,
+      affectedSessionsCount: sessionImpact.affectedSessionsCount, // <--- NEW UX EXPORT
       availableSessionsInRange: sessionImpact.availableSessions,
       availableSessionDates: sessionImpact.availableSessionDates,
       deductedSessionDates: sessionImpact.deductedSessionDates,
@@ -525,7 +562,7 @@ class LeaveService {
 
     // Check leave balance
     const balance = await leaveRepository.getStudentBalance(studentId);
-    if (balance < totalDays) {
+    if (balance < totalDays && !submitAnyway) {
       throw new AppError(
         `Insufficient leave balance. Available: ${balance} days, Requested: ${totalDays} days.`,
         400
@@ -667,6 +704,7 @@ class LeaveService {
         special_weekend_days: dayBreakdown.specialWeekendDays,
         excluded_days: dayBreakdown.excludedDays,
         chargeable_days: totalDays,
+        affected_sessions_count: sessionImpact.affectedSessionsCount,
         available_sessions: sessionImpact.availableSessions,
       },
     };
